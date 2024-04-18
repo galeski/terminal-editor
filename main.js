@@ -3,34 +3,63 @@ const fs = require('fs');
 const path = require('path');
 const keypress = require('keypress');
 
-// Specify the file path
-const filePath = '/home/mg/Documents/testfile';
+// Stop if no argument given
+if (!process.argv[2]) {
+  console.log("No file specified. Closing app.");
+  process.exit();
+}
 
-// fs.readFile(filePath, 'utf8', (err, data) => {
-//   if (err) {
-//     console.error("Error reading file:", err);
-//   } else {
-//     console.log(data);
-//   }
-// });
-//
+// Specify the file path
+const filePath = String(process.argv[2]).includes("/")
+  ? String(process.argv[2])
+  : String(__dirname+ "/" + process.argv[2]);
 
 class FileBuffer {
   constructor(filePath) {
     this.filePath = String(filePath);
     this.fileContent;
+    this.fileContentBinary;
     this.dirty = false;
+    this.fileMap = [];
   }
   readFile = function(filePath, encoding) {
     try {
       const data = fs.readFileSync(filePath, encoding);
-      this.fileContent = Buffer.from(data).toString();
+      this.fileContent = Buffer.from(data).toString('utf-8');
+      this.fileContentBinary = Buffer.from(data);
     } catch (err) {
       console.error("Error reading file:", err);
     }
   }
   printFileContent = function() {
     console.log(this.fileContent);
+  }
+  // TODO: on save we need to compare two binary formats
+  // the one from the fileContentBinary and the reverse of fileMap
+  // TODO: maybe rename fileMap to fileEditedMap or fileEditedArray
+  // TODO: add push method for first line, but this is temporary
+  // think maybe if we need to have statusline on top
+  createFileContentMap = function() {
+    this.fileMap.push("");
+    this.fileMap.push(this.fileContentBinary.toString('utf-8').split('\n'));
+  }
+  checkFileBoundaries = function(x, y) {
+    if (!this.fileMap.length) {
+      console.log("File Map not created");
+    }
+
+    // we need to account for statusline on top of the screen
+    const currentLine = x;
+    const currentColumn = y;
+
+    console.log(this.fileMap[x][y]);
+
+    // if (currentLine >= this.fileMap.length ||
+    //     currentColumn >= this.fileMap[currentLine].length) {
+    //   return false;
+    // } else {
+    //   return true;
+    // }
   }
 }
 
@@ -71,11 +100,23 @@ const clearLine = () => {
   out("\33[2K\r");
 }
 
-const updateCursor = (view, a = 0, b = 0) => {
+const updateCursor = (view, file, a = 0, b = 0) => {
   const x = view.cursorPos[0];
   const y = view.cursorPos[1];
-  moveCursor(x + a, y + b);
-  view.updateCursorPos(x + a, y + b);
+  // printMessage(view, file.checkFileBoundaries(), undefined);
+  // if (file.checkFileBoundaries(x, y)) {
+    moveCursor(x + a, y + b);
+    view.updateCursorPos(x + a, y + b);
+  // }
+}
+
+const printMessage = (view, message, arg = "") => {
+    let prevCursorPosX = view.cursorPos[0];
+    let prevCursorPosY = view.cursorPos[1];
+    moveCursor(1, 1);
+    clearLine();
+    console.log(message, arg ? arg : "");
+    moveCursor(prevCursorPosX, prevCursorPosY);
 }
 
 clearScreen();
@@ -85,20 +126,19 @@ let editedFile = new FileBuffer(filePath);
 let currentView = new CreateView(editedFile);
 editedFile.readFile(editedFile.filePath);
 editedFile.printFileContent();
+editedFile.createFileContentMap();
 moveCursor(1, 2);
 
 // make `process.stdin` begin emitting "keypress" events
 keypress(process.stdin);
 
+// editedFile.printFileContentByLine();
+// process.exit()
+
 // listen for the "keypress" event
 process.stdin.on('keypress', function (ch, key) {
   if (key && debug) {
-    let prevCursorPosX = currentView.cursorPos[0];
-    let prevCursorPosY = currentView.cursorPos[1];
-    moveCursor(1, 1);
-    clearLine();
-    console.log('got keypress: ', key.name);
-    moveCursor(prevCursorPosX, prevCursorPosY);
+    printMessage(currentView, "got keypress: ", key.name);
   }
   if (key) editedFile.dirty = true;
 
@@ -108,20 +148,19 @@ process.stdin.on('keypress', function (ch, key) {
     if (editedFile.dirty) out("File was edited.");
     process.stdin.pause();
   } else if (key && key.name == 'up') {
-    updateCursor(currentView, 0, -1);
+    updateCursor(currentView, editedFile, 0, -1);
   } else if (key && key.name == 'down') {
-    updateCursor(currentView, 0, +1);
+    updateCursor(currentView, editedFile, 0, +1);
   } else if (key && key.name == 'left') {
-    updateCursor(currentView, -1, 0);
+    updateCursor(currentView, editedFile, -1, 0);
   } else if (key && key.name == 'right') {
-    updateCursor(currentView, +1, 0);
+    updateCursor(currentView, editedFile, +1, 0);
   } else {
     if (key.name != "backspace") {
       out(key.name);
       // move cursor one to the right, fixes debug logging
-      updateCursor(currentView, +1, 0);
-    }
-    else updateCursor(currentView, -1, 0);
+      updateCursor(currentView, editedFile, +1, 0);
+    } else updateCursor(currentView, editedFile, -1, 0);
     // console.log(key);
   }
 
@@ -130,30 +169,3 @@ process.stdin.on('keypress', function (ch, key) {
 
 process.stdin.setRawMode(true);
 process.stdin.resume();
-
-// mainloop = function() {
-//   while(true) {
-//     let newFile = new FileBuffer(filePath);
-//     newFile.readFile(newFile.filePath);
-//     // console.log(newFile.fileContent);
-//     let newView = new CreateView(newFile);
-//     process.stdin.setRawMode(true)
-//     newView.clearScreen();
-//     newView.moveCursor(0, 0)
-//     newFile.printFileContent();
-//     // process.stdin.on('data', (data) => {
-//     //   let input = data.toString().trim();
-//     //   if (input === 'x') {
-//     //     process.exit()
-//     //   }
-//     // });
-//   }
-// }
-// mainloop()
-
-// console.log(newView.out("test"));
-
-// setTimeout(function () {
-//   console.log('boo')
-// }, 1000000);
-
