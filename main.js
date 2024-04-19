@@ -49,17 +49,18 @@ class FileBuffer {
     }
 
     // we need to account for statusline on top of the screen
+    // TODO: this shit doesn't work! why?
     const currentLine = x;
     const currentColumn = y;
 
     console.log(this.fileMap[x][y]);
 
-    // if (currentLine >= this.fileMap.length ||
-    //     currentColumn >= this.fileMap[currentLine].length) {
-    //   return false;
-    // } else {
-    //   return true;
-    // }
+    if (currentLine >= this.fileMap.length ||
+        currentColumn >= this.fileMap[currentLine].length) {
+      return false;
+    } else {
+      return true;
+    }
   }
 }
 
